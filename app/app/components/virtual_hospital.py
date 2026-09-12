@@ -1,3 +1,5 @@
+import os
+import tempfile
 from pathlib import Path
 
 import cloudpickle
@@ -8,6 +10,15 @@ from dash.dependencies import Input, Output, State
 
 from .. import api
 from ..app import app
+
+
+def _get_hospital_temp_file():
+    if os.name != "nt":
+        temp_dir = Path("/tmp/hospital")
+    else:
+        temp_dir = Path(tempfile.gettempdir()) / "hospital"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    return temp_dir / "hospital.pkl"
 
 # ------------- Components -------------
 
@@ -197,7 +208,14 @@ def display_hospital(n_clicks):
     """
     Creates a clickable display of the wards in the hospital
     """
-    with open("/tmp/hospital/hospital.pkl", "rb") as f:
+    hosp_file = _get_hospital_temp_file()
+    if not hosp_file.exists():
+        if Path("/tmp/hospital/hospital.pkl").exists():
+            hosp_file = Path("/tmp/hospital/hospital.pkl")
+        else:
+            get_hospital(0)
+
+    with open(hosp_file, "rb") as f:
         hospital = cloudpickle.load(f)
 
     hosp_accordion = dbc.Container(
@@ -217,9 +235,18 @@ def get_hospital(n_clicks):
     """
     hospital = api.get_populated_hospital(0.95)
 
-    Path("/tmp/hospital").mkdir(parents=True, exist_ok=True)
-    with open("/tmp/hospital/hospital.pkl", "wb") as f:
+    hosp_file = _get_hospital_temp_file()
+    with open(hosp_file, "wb") as f:
         cloudpickle.dump(hospital, f)
+
+    try:
+        legacy_path = Path("/tmp/hospital")
+        legacy_path.mkdir(parents=True, exist_ok=True)
+        with open(legacy_path / "hospital.pkl", "wb") as f:
+            cloudpickle.dump(hospital, f)
+    except Exception:
+        pass
+
     return {"update": "true"}
 
 

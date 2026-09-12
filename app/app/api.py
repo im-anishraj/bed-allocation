@@ -23,11 +23,26 @@ from hospital.building.building import Hospital
 from hospital.building.room import BedBay, SideRoom
 from hospital.building.ward import Ward
 from hospital.people import Patient, patient_to_dict
+from hospital.priority import calculate_patient_priority
 
 DIRNAME = os.path.dirname(__file__)
 
 # Flag to set if using real vs dummy data
 REAL_DATA = True
+
+PERCENTILES = None
+ADMISSIONS = pd.DataFrame()
+WARDS = pd.DataFrame(
+    {
+        "Ward name": ["Ward A", "Ward B", "Ward C", "Ward D", "Ward E", "Ward F"],
+        "Ward Specialty": ["Medicine", "Medicine", "Medicine", "Medicine", "Surgery", "Surgery"],
+        "Specialty": ["general", "endocrinology", "endocrinology", "respiratory", "general", "trauma_and_orthopaedic"],
+        "Ward sex": ["Mixed", "Female", "Male", "Mixed", "Mixed", "Mixed"],
+        "Ward COVID-19 Status": ["Green", "Green", "Green", "Red", "Green", "Green"],
+        "Bed count (July 2021)": [26, 26, 26, 26, 25, 25],
+        "Side room count": [4, 4, 4, 4, 3, 3],
+    }
+)
 
 # Errors are not thrown as this creates a catch 22 when creating fake data
 if REAL_DATA:
@@ -36,27 +51,24 @@ if REAL_DATA:
         PERCENTILES = pickle.load(
             open(os.path.join(DIRNAME, "data/forecast_percentiles.pkl"), "rb")
         )
-    except FileNotFoundError as e:
+    except FileNotFoundError:
         print(
             "Warning: forecast data not found, see "
             "app/app/data/get_forecast_percentiles.py"
         )
-        # raise e
 
     try:
         ADMISSIONS = pd.read_csv(
             os.path.join(DIRNAME, "../../data/historic_admissions.csv"),
             index_col=0,
         )
-    except FileNotFoundError as e:
+    except FileNotFoundError:
         print("Warning: training data not found")
-        # raise e
 
 try:
     WARDS = pd.read_csv(os.path.join(DIRNAME, "data/wards.csv"), index_col=0)
-except FileNotFoundError as e:
-    print("Warning: ward file not found")
-    # raise e
+except FileNotFoundError:
+    print("Warning: ward file not found, using default ward configuration")
 
 
 FIELD_MAP = {
@@ -223,10 +235,12 @@ def map_assesment_unit(patient_details: dict) -> str:
         return "DASU"
 
 
-def get_patient() -> Dict[str, Any]:
+def get_patient(target_tier: str = None) -> Tuple[Dict[str, Any], list]:
     """
-    Generate random patient.
+    Generate random patient with balanced distribution across Critical, Monitor, and General wards.
     """
+    if target_tier is None:
+        target_tier = np.random.choice(["Critical", "Monitor", "General"], p=[0.34, 0.33, 0.33])
 
     patient = []
 
@@ -236,8 +250,8 @@ def get_patient() -> Dict[str, Any]:
         # Generate 1 random patient for random day and hour
         patient_sample = generate_random_patients(
             1,
-            np.random.choice([day for day in range(0, 7)]),
-            np.random.choice([hour for hour in range(0, 24)]),
+            int(np.random.choice([day for day in range(0, 7)])),
+            int(np.random.choice([hour for hour in range(0, 24)])),
         )
         # Filter patient to check they are in POC specialty, above 18 and not
         # elective
@@ -248,8 +262,71 @@ def get_patient() -> Dict[str, Any]:
         # Patient class
         patient = pandas_to_patients(patient_sample)
 
+    p_obj = patient[0]
+
+    # Shape clinical profile according to targeted ward tier (Equal 3-tier distribution)
+    if target_tier == "Critical":
+        p_obj.is_high_acuity = True
+        if np.random.rand() > 0.5:
+            p_obj.is_known_covid = True
+            p_obj.is_suspected_covid = False
+            p_obj.is_end_of_life = False
+        else:
+            p_obj.is_end_of_life = True
+            p_obj.is_known_covid = False
+            p_obj.is_suspected_covid = False
+        p_obj.age = int(np.random.randint(72, 90))
+        p_obj.is_falls_risk = bool(np.random.choice([False, True], p=[0.5, 0.5]))
+
+    elif target_tier == "Monitor":
+        p_obj.is_high_acuity = False
+        p_obj.is_end_of_life = False
+        p_obj.is_known_covid = False
+
+        # Calibrate so total score is strictly in [40, 65]
+        scenario = int(np.random.randint(4))
+        p_obj.is_immunosupressed = False
+        p_obj.is_suspected_covid = False
+        p_obj.is_infection_control = False
+        p_obj.needs_visual_supervision = False
+        p_obj.is_dementia_risk = False
+        p_obj.is_falls_risk = False
+
+        if scenario == 0:
+            p_obj.is_immunosupressed = True  # +30
+            p_obj.age = int(np.random.randint(65, 78))  # +15 -> 45
+        elif scenario == 1:
+            p_obj.is_suspected_covid = True  # +25
+            p_obj.needs_visual_supervision = True  # +20 -> 45
+            p_obj.age = int(np.random.randint(40, 60))
+        elif scenario == 2:
+            p_obj.is_infection_control = True  # +25
+            p_obj.is_dementia_risk = True  # +20 -> 45
+            p_obj.age = int(np.random.randint(45, 62))
+        else:
+            p_obj.needs_visual_supervision = True  # +20
+            p_obj.is_dementia_risk = True  # +20 -> 40
+            p_obj.age = int(np.random.randint(45, 64))
+
+    else:  # General
+        p_obj.is_high_acuity = False
+        p_obj.is_end_of_life = False
+        p_obj.is_known_covid = False
+        p_obj.is_suspected_covid = False
+        p_obj.is_immunosupressed = False
+        p_obj.is_infection_control = False
+        p_obj.needs_visual_supervision = False
+        p_obj.is_dementia_risk = False
+        p_obj.is_falls_risk = bool(
+            np.random.choice([False, True], p=[0.75, 0.25])
+        )
+        p_obj.age = int(np.random.randint(22, 59))
+
+    # calculate priority using clinical if-else ladder
+    priority_info = calculate_patient_priority(p_obj)
+
     # convert to dict
-    patient_details = patient_to_dict(patient[0])
+    patient_details = patient_to_dict(p_obj)
     # remove redundant fields
     patient_details.pop("expected_length_of_stay", None)
     patient_details.pop("length_of_stay", None)
@@ -274,9 +351,52 @@ def get_patient() -> Dict[str, Any]:
     }
     # tidy up name
     patient_details["Name"] = np.random.choice(
-        ["Alexis Green", "Taylor Brown", "Sam Black", "Morgan Grey"]
+        [
+            "Alexis Green",
+            "Taylor Brown",
+            "Sam Black",
+            "Morgan Grey",
+            "Jordan Rivera",
+            "Casey Ellis",
+            "Robin Kelly",
+            "Jamie Vance",
+        ]
     )
+    # attach priority scoring and ward routing information
+    patient_details["Priority Score"] = priority_info["score_str"]
+    patient_details["Priority Level"] = priority_info["priority_tier"]
+    patient_details["Target Ward"] = priority_info["target_ward"]
+    patient_details["Contributing Factors"] = priority_info["factors_summary"]
+
     return patient_details, patient
+
+
+def generate_100_patients() -> List[Dict[str, Any]]:
+    """
+    Generates a dataset of 100 patients distributed equally across the three wards:
+      - 34 Critical patients
+      - 33 Monitor patients
+      - 33 General patients
+    Saves to data/patient_priority_100.csv and returns list of dicts.
+    """
+    tiers = ["Critical"] * 34 + ["Monitor"] * 33 + ["General"] * 33
+    np.random.shuffle(tiers)
+
+    records = []
+    for idx, tier in enumerate(tiers):
+        p_details, _ = get_patient(target_tier=tier)
+        rec = dict(p_details)
+        rec["Patient ID"] = f"P{1001 + idx}"
+        records.append(rec)
+
+    try:
+        csv_path = os.path.join(DIRNAME, "../../data/patient_priority_100.csv")
+        os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+        pd.DataFrame(records).to_csv(csv_path, index=False)
+    except Exception as err:
+        print("Could not save patient_priority_100.csv:", err)
+
+    return records
 
 
 def _covid_status(patient_details: dict) -> dict:

@@ -7,3 +7,5 @@ try:
 except ImportError:
     __version__ = "unknown"
 
+from .priority import calculate_patient_priority
+

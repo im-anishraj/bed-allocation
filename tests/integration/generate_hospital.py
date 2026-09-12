@@ -158,6 +158,9 @@ for ward in wards:
 print(f"Rooms: {len(hospital.rooms)},Beds: {len(hospital.beds)}")
 
 # Save hospital
+import os
+
+os.makedirs("../../data", exist_ok=True)
 with open("../../data/hospital.pkl", "wb") as f:
     cloudpickle.dump(hospital, f)
     print("hospital.pkl saved")
@@ -204,5 +207,6 @@ for w in wards:
     df = pd.concat([df, pd.DataFrame([d])], ignore_index=True)
 
 # Save dataframe to csv
+os.makedirs("../../app/app/data", exist_ok=True)
 df.to_csv("../../app/app/data/wards.csv")
 print("wards.csv saved")
