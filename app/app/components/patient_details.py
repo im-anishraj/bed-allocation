@@ -30,7 +30,7 @@ patient_list_modal = dbc.Modal(
     [
         dbc.ModalHeader(
             dbc.ModalTitle(
-                "🏥 Patient Admission Triage List (100 Patients - Equal Ward Distribution)"
+                "🏥 Patient Admission Triage List (100 Patients — 3 General → 1 Monitor → 2 General → 1 Critical)"
             )
         ),
         dbc.ModalBody(id="patient_list_modal_body"),

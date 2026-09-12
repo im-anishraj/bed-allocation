@@ -235,12 +235,39 @@ def map_assesment_unit(patient_details: dict) -> str:
         return "DASU"
 
 
+# Sequential order requested:
+# first 3 general, then 1 monitor, then 2 general, then 1 critical (looping)
+PATIENT_WARD_SEQUENCE = [
+    "General",
+    "General",
+    "General",
+    "Monitor",
+    "General",
+    "General",
+    "Critical",
+]
+_patient_sequence_idx = 0
+
+
+def reset_patient_sequence(start_idx: int = 0) -> None:
+    """Reset the interactive sequence counter."""
+    global _patient_sequence_idx
+    _patient_sequence_idx = start_idx
+
+
 def get_patient(target_tier: str = None) -> Tuple[Dict[str, Any], list]:
     """
-    Generate random patient with balanced distribution across Critical, Monitor, and General wards.
+    Generate random patient following the sequential order:
+    first 3 General, then 1 Monitor, then 2 General, then 1 Critical (looping).
     """
+    global _patient_sequence_idx
     if target_tier is None:
-        target_tier = np.random.choice(["Critical", "Monitor", "General"], p=[0.34, 0.33, 0.33])
+        seq_len = len(PATIENT_WARD_SEQUENCE)
+        target_tier = PATIENT_WARD_SEQUENCE[_patient_sequence_idx % seq_len]
+        sequence_step = (_patient_sequence_idx % seq_len) + 1
+        _patient_sequence_idx += 1
+    else:
+        sequence_step = None
 
     patient = []
 
@@ -264,7 +291,7 @@ def get_patient(target_tier: str = None) -> Tuple[Dict[str, Any], list]:
 
     p_obj = patient[0]
 
-    # Shape clinical profile according to targeted ward tier (Equal 3-tier distribution)
+    # Shape clinical profile according to targeted ward tier (General, Monitor, Critical)
     if target_tier == "Critical":
         p_obj.is_high_acuity = True
         if np.random.rand() > 0.5:
@@ -367,26 +394,28 @@ def get_patient(target_tier: str = None) -> Tuple[Dict[str, Any], list]:
     patient_details["Priority Level"] = priority_info["priority_tier"]
     patient_details["Target Ward"] = priority_info["target_ward"]
     patient_details["Contributing Factors"] = priority_info["factors_summary"]
+    if sequence_step is not None:
+        patient_details["Sequence Step"] = f"Step {sequence_step}/7 ({target_tier})"
 
     return patient_details, patient
 
 
 def generate_100_patients() -> List[Dict[str, Any]]:
     """
-    Generates a dataset of 100 patients distributed equally across the three wards:
-      - 34 Critical patients
-      - 33 Monitor patients
-      - 33 General patients
+    Generates a dataset of 100 patients strictly following the requested pattern:
+    first 3 General, then 1 Monitor, then 2 General, then 1 Critical (looping for 100 patients).
     Saves to data/patient_priority_100.csv and returns list of dicts.
     """
-    tiers = ["Critical"] * 34 + ["Monitor"] * 33 + ["General"] * 33
-    np.random.shuffle(tiers)
+    pattern = PATIENT_WARD_SEQUENCE
+    tiers = [pattern[i % len(pattern)] for i in range(100)]
 
     records = []
     for idx, tier in enumerate(tiers):
         p_details, _ = get_patient(target_tier=tier)
         rec = dict(p_details)
         rec["Patient ID"] = f"P{1001 + idx}"
+        rec["Order #"] = idx + 1
+        rec["Pattern Step"] = f"Step {(idx % len(pattern)) + 1}/7 ({tier})"
         records.append(rec)
 
     try:
