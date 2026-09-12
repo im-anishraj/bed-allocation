@@ -176,6 +176,7 @@ def generate_patient_details_table(patient_details):
     priority_score = patient_details.pop("Priority Score", "0 / 100")
     priority_level = patient_details.pop("Priority Level", "STANDARD PRIORITY")
     target_ward = patient_details.pop("Target Ward", "General")
+    sequence_step = patient_details.pop("Sequence Step", None)
     contributing_factors = patient_details.pop(
         "Contributing Factors", "Routine Clinical Admission (No acute flags)"
     )
