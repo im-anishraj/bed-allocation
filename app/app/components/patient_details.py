@@ -17,8 +17,13 @@ generate_patient_button = dbc.Button(
 )
 
 
-# ------------- Structure -------------
-
+patient_list_button = dbc.Button(
+    "SEE PATIENT LIST",
+    id="see_patient_list",
+    style={"width": "260px"},
+    color="secondary",
+    outline=True,
+)
 
 patient_details_block = dbc.Card(
     [
@@ -28,10 +33,16 @@ patient_details_block = dbc.Card(
                     [
                         dbc.Col(
                             [generate_patient_button],
+                            width="auto",
+                        ),
+                        dbc.Col(
+                            [patient_list_button],
+                            width="auto",
                         ),
                         dcc.Store(id="patient_details_data"),
                     ],
                     className="p-2",
+                    justify="between",
                 ),
                 html.Div(
                     "Press the Next Patient button to generate a new random"
