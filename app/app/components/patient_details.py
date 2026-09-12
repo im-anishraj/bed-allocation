@@ -299,6 +299,23 @@ def generate_patient_details_table(patient_details):
                                                 style=ward_badge_style,
                                                 className="shadow-sm",
                                             ),
+                                            (
+                                                dbc.Badge(
+                                                    f"SEQUENCE: {sequence_step}",
+                                                    style={
+                                                        "backgroundColor": "#343a40",
+                                                        "color": "white",
+                                                        "fontSize": "0.85rem",
+                                                        "fontWeight": "600",
+                                                        "padding": "6px 12px",
+                                                        "borderRadius": "5px",
+                                                        "marginLeft": "10px",
+                                                    },
+                                                    className="shadow-sm",
+                                                )
+                                                if sequence_step
+                                                else html.Span()
+                                            ),
                                         ],
                                         className="d-flex align-items-center mb-2 flex-wrap",
                                     ),
@@ -415,6 +432,16 @@ def render_patient_list_table(patients=None):
     from collections import Counter
     counts = Counter(p.get("Target Ward", "General") for p in patients)
 
+    pattern_banner = dbc.Alert(
+        [
+            html.Strong("🔄 Generation Sequence Loop: "),
+            html.Span("3 General → 1 Monitor → 2 General → 1 Critical (Repeated cyclically across all 100 admissions)"),
+        ],
+        color="info",
+        className="py-2 px-3 mb-2 border shadow-sm",
+        style={"fontSize": "0.9rem"},
+    )
+
     summary_bar = dbc.Row(
         [
             dbc.Col(
@@ -487,8 +514,10 @@ def render_patient_list_table(patients=None):
     )
 
     table_rows = []
-    for p in patients:
+    for idx, p in enumerate(patients):
         ward = p.get("Target Ward", "General")
+        order_no = p.get("Order #", idx + 1)
+        pattern_step = p.get("Pattern Step", f"Step {(idx % 7) + 1}/7 ({ward})")
         if ward == "Critical":
             badge_color = "danger"
         elif ward == "Monitor":
@@ -499,7 +528,15 @@ def render_patient_list_table(patients=None):
         table_rows.append(
             html.Tr(
                 [
+                    html.Td(str(order_no), style={"fontWeight": "bold", "textAlign": "center", "width": "45px"}),
                     html.Td(p.get("Patient ID", "-"), style={"fontWeight": "600"}),
+                    html.Td(
+                        dbc.Badge(
+                            pattern_step,
+                            color="dark",
+                            style={"fontSize": "0.78rem", "padding": "4px 8px"},
+                        )
+                    ),
                     html.Td(p.get("Name", "-")),
                     html.Td(f"{p.get('Age', '-')}y / {str(p.get('Sex', '-')).capitalize()}"),
                     html.Td(
@@ -530,7 +567,9 @@ def render_patient_list_table(patients=None):
             html.Thead(
                 html.Tr(
                     [
+                        html.Th("#", style={"textAlign": "center"}),
                         html.Th("Patient ID"),
+                        html.Th("Cycle Step"),
                         html.Th("Name"),
                         html.Th("Age / Sex"),
                         html.Th("Division / Specialty"),
@@ -552,11 +591,12 @@ def render_patient_list_table(patients=None):
 
     return html.Div(
         [
+            pattern_banner,
             summary_bar,
             html.Div(
                 table,
                 style={
-                    "maxHeight": "540px",
+                    "maxHeight": "520px",
                     "overflowY": "auto",
                     "border": "1px solid #dee2e6",
                     "borderRadius": "4px",
