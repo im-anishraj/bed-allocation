@@ -219,7 +219,17 @@ def suggest_moves(n_clicks, patient_details):
         return None
     patient_details = json.loads(patient_details)
 
-    with open("/tmp/hospital/hospital.pkl", "rb") as f:
+    from pathlib import Path
+    from .virtual_hospital import _get_hospital_temp_file, get_hospital
+
+    hosp_file = _get_hospital_temp_file()
+    if not hosp_file.exists():
+        if Path("/tmp/hospital/hospital.pkl").exists():
+            hosp_file = Path("/tmp/hospital/hospital.pkl")
+        else:
+            get_hospital(0)
+
+    with open(hosp_file, "rb") as f:
         hospital = cloudpickle.load(f)
 
     # update this call when using the real allocation model
