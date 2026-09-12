@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: skunkworks-app
+    ports:
+      - "8888:8888"
+    volumes:
+      - .:/workspace
+    environment:
+      - HOST=0.0.0.0
+    restart: unless-stopped
